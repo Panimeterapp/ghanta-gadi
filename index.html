@@ -738,8 +738,8 @@ const DEF_SETTINGS = {
   tripRate: 500,
   stages: 'सुरुवात,शेवट',
   fenceMeters: 10,
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbwTu9x5OkDeXcv1PfVv69TZYJVD2HhggDJhk-f1tUgaGA6KcrWkp2r5yGlMjeDtrbhDjA/exec',
-  sheetUrl: 'https://docs.google.com/spreadsheets/d/1fPTBp_4H3F5nUHuCNsAXOL3wHt0MtHASLtPzFg-6GZY/edit',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzvmupoqVcl8ZCvdhjX3-Pgoyex0ltco4f3maaETrZDsPU7zlccwum8R7iQ74kxjyvmDg/exec',
+  sheetUrl: 'https://docs.google.com/spreadsheets/d/10SLjB59Qfn9q2OWRGuvYrypvONoJxrwMynMGN6A1nPU/edit?gid=0#gid=0',
   autoSync: true,
   drvPhone: '',
   srpPhone: '',
@@ -860,10 +860,50 @@ async function loadFromSheets(showLoader) {
   }
 }
 
+// Sheet मधून Trips परत आणा (2-way sync) — driverId दिल्यास फक्त त्या ड्रायव्हरचे trips
+async function pullTripsFromSheet(driverId) {
+  const s = getSettings();
+  if (!s.scriptUrl) return;
+  try {
+    const url = s.scriptUrl + '?action=getTrips&t=' + Date.now() +
+      (driverId ? '&driverId=' + encodeURIComponent(driverId) : '');
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.success || !data.trips) return;
+
+    const local = DB.get('trips') || [];
+    const byId = new Map(local.map(t => [String(t.id), t]));
+
+    data.trips.forEach(remote => {
+      const key = String(remote.id);
+      const existing = byId.get(key);
+      if (existing) {
+        // आधीच आहे — फक्त status/payment/sync फील्ड्स update करा, local stage/photo data तसंच ठेवा
+        existing.status      = remote.status;
+        existing.paymentDate = remote.paymentDate;
+        existing.paymentMode = remote.paymentMode;
+        existing.paymentUTR  = remote.paymentUTR;
+        existing.synced      = true;
+      } else {
+        // नवीन — दुसऱ्या डिव्हाइसवर किंवा Sheet मध्ये थेट तयार झालेला trip
+        byId.set(key, { ...remote, fromStopId: null, toStopId: null, completedStages: [], stagePhotos: {}, stageGPS: {} });
+      }
+    });
+
+    DB.set('trips', Array.from(byId.values()));
+    updateSyncBadge();
+  } catch (e) {
+    console.warn('pullTripsFromSheet error:', e.message);
+  }
+}
+
+
 async function manualRefresh() {
   const btn = document.querySelector('[onclick="manualRefresh()"]');
   if (btn) btn.textContent = '⏳ Loading...';
   await loadFromSheets(true);
+  if (currentUser && currentUser.role === 'user') { await pullTripsFromSheet(currentUser.id); refreshDrvHome(); }
+  else { await pullTripsFromSheet(); if (currentUser && currentUser.role === 'admin') refreshAdmDash(); else renderDevData(); }
   if (btn) btn.textContent = '✅ Refresh झाले';
   setTimeout(() => { if (btn) btn.textContent = '🔄 Data refresh करा'; }, 2000);
 }
@@ -1061,6 +1101,8 @@ function initDrvScreen() {
   }
   populateTripStops();
   refreshDrvHome();
+  // Sheet मधून या ड्रायव्हरचे जुने trips परत आणा (दुसऱ्या मोबाईलवरचे history इथेही दिसेल)
+  pullTripsFromSheet(currentUser.id).then(refreshDrvHome);
 }
 
 function showDrvTab(tab) {
@@ -1454,6 +1496,8 @@ function initAdmScreen() {
   refreshAdmDash();
   populateBillDrivers();
   document.getElementById('bill-month').value = new Date().getMonth();
+  // Sheet मधील सर्व drivers चे trips परत आणा
+  pullTripsFromSheet().then(() => { refreshAdmDash(); });
 }
 
 function showAdmTab(tab) {
@@ -1696,6 +1740,8 @@ function initDevScreen() {
   renderDevUsers();
   renderDevStops();
   renderDevData();
+  // Sheet मधील सर्व trips परत आणा
+  pullTripsFromSheet().then(renderDevData);
 }
 
 function showDevTab(tab) {
@@ -1792,6 +1838,8 @@ async function pushSettingsToSheets() {
     showToast('❌ Push failed — internet तपासा');
   }
 }
+
+function testPhotoCompression() {
   const s = getSettings();
   const maxKB = parseInt(document.getElementById('cfg-photo-maxkb')?.value) || s.photoMaxKB || 150;
   const maxW  = parseInt(document.getElementById('cfg-photo-maxwidth')?.value) || s.photoMaxWidth || 1024;

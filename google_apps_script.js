@@ -31,6 +31,7 @@ function doPost(e) {
       case 'getSettings':  result = getSettings();                 break;
       case 'getUsers':     result = getUsers();                    break;
       case 'getStops':     result = getStops();                    break;
+      case 'getTrips':     result = getTrips(data.driverId);        break;
       case 'addPayment':   result = addPayment(data.payment);      break;
       case 'uploadPhoto':  result = uploadPhoto(data.photo);       break;
       case 'saveUsers':    result = saveUsers(data.users);         break;
@@ -60,6 +61,9 @@ function doGet(e) {
   }
   if (action === 'getStops') {
     return jsonResponse({ success: true, ...getStops() });
+  }
+  if (action === 'getTrips') {
+    return jsonResponse({ success: true, ...getTrips(e.parameter.driverId) });
   }
   if (e.parameter.test) {
     return jsonResponse({
@@ -182,6 +186,32 @@ function syncBulk(trips) {
   });
   if (added > 0) updateMonthlySummary();
   return { added, skipped };
+}
+
+// Sheet मधील सर्व trips परत App ला पाठवा (driverId दिल्यास फक्त त्या ड्रायव्हरचे)
+function getTrips(driverId) {
+  const sh = ensureTripsSheet();
+  const data = sh.getDataRange().getValues();
+  let trips = data.slice(1).filter(r => r[0]).map(r => {
+    let fromName = r[5] || '', toName = r[6] || '';
+    if (!fromName && !toName && r[7]) {
+      const parts = String(r[7]).split('→').map(x => x.trim());
+      fromName = parts[0] || ''; toName = parts[1] || '';
+    }
+    return {
+      id: r[0], date: r[1], time: r[2],
+      driverId: r[3], driverName: r[4],
+      fromName, toName,
+      amount: Number(r[10]) || 0,
+      status: r[11] || 'complete',
+      paymentDate: r[12] || '', paymentMode: r[13] || '', paymentUTR: r[14] || '',
+      month: (Number(r[15]) || 1) - 1, // App मध्ये month 0-indexed आहे
+      year: Number(r[16]) || new Date().getFullYear(),
+      synced: true
+    };
+  });
+  if (driverId) trips = trips.filter(t => String(t.driverId) === String(driverId));
+  return { trips };
 }
 
 // Payment नोंद झाल्यावर trip update करा
