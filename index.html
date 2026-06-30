@@ -169,6 +169,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .bill-tbl td { padding: 7px 6px; border-bottom: 1px solid var(--gray2); }
 .bill-tbl tfoot td { background: var(--primary-light); font-weight: 800; color: var(--primary); }
 
+/* STAGE CHIPS */
+.chip-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+.chip { background: var(--primary-light); color: var(--primary); border-radius: 99px; padding: 6px 8px 6px 12px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.chip-x { background: rgba(0,0,0,0.12); border: none; color: var(--primary); width: 18px; height: 18px; border-radius: 50%; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.chip-x:active { background: rgba(0,0,0,0.25); }
+.chip-add-row { display: flex; gap: 7px; }
+.chip-add-row input { flex: 1; }
+
 /* SETTINGS */
 .settings-group { background: white; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 11px; overflow: hidden; }
 .sg-title { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px 6px; background: var(--gray); border-bottom: 1px solid var(--border); }
@@ -254,6 +262,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .stage-label { font-size: 9px; color: var(--text3); text-align: center; margin-top: 3px; max-width: 50px; line-height: 1.2; }
 .stage-col { display: flex; flex-direction: column; align-items: center; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
@@ -423,6 +432,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div class="stat-box"><div class="stat-num" id="adm-trips">0</div><div class="stat-lbl">Trips (महिना)</div></div>
       <div class="stat-box"><div class="stat-num" id="adm-total">₹0</div><div class="stat-lbl">देय रक्कम</div></div>
     </div>
+    <div class="card">
+      <div class="card-title">📍 फोटो थांबे (Stages)</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">सुरुवात व शेवट कायम राहतात — मध्ये हवे तितके थांबे जोडा, जिथे चालकाला फोटो काढावा लागेल.</div>
+      <div class="chip-list" id="adm-stages-chips"></div>
+      <div class="chip-add-row">
+        <input class="sr-input" id="adm-stage-new" placeholder="नवीन मधला थांबा">
+        <button class="btn btn-primary btn-sm" onclick="addMiddleStage('adm-stage-new','adm-stages-chips')">+ जोडा</button>
+      </div>
+    </div>
     <div class="section-label">चालक यादी</div>
     <div id="adm-drivers"></div>
   </div>
@@ -459,10 +477,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <select id="bill-driver" class="form-input"></select>
       </div>
       <button class="btn btn-primary btn-full" onclick="makeBill()">📋 बिल तयार करा</button>
+      <button class="btn btn-outline btn-full mt-12" id="btn-bulk-pdf" style="display:none;" onclick="generateAllDriverBills()">📥 प्रत्येक चालकाचे वेगळे PDF बनवा</button>
     </div>
     <div id="bill-area" style="display:none;">
       <div class="bill-box" id="bill-content">
         <div class="bill-head">
+          <div id="bill-logo" style="font-size:38px;line-height:1;margin-bottom:4px;">🚌</div>
           <h2 id="bill-gram-name">ग्रामपंचायत</h2>
           <p id="bill-period">महिना: —</p>
           <p id="bill-drv-name">चालक: —</p>
@@ -539,9 +559,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <input class="sr-input" id="cfg-trip-rate" type="number" placeholder="500">
       </div>
       <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-        <div class="sr-label">Trip Stages (comma ने विभागा)</div>
-        <input class="sr-input" id="cfg-stages" placeholder="सुरुवात,मध्य,शेवट">
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">उदा: सुरुवात,शेवट &nbsp;|&nbsp; लोडिंग,अनलोडिंग &nbsp;|&nbsp; Pick-up,Drop</div>
+        <div class="sr-label">Trip Stages — फोटो काढण्याचे थांबे</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:2px;">सुरुवात व शेवट हे कायम राहतात — मध्ये हवे तितके थांबे जोडा/काढा.</div>
+        <div class="chip-list" id="cfg-stages-chips"></div>
+        <div class="chip-add-row">
+          <input class="sr-input" id="cfg-stage-new" placeholder="नवीन मधला थांबा (उदा. लोडिंग पॉइंट)">
+          <button class="btn btn-primary btn-sm" onclick="addMiddleStage('cfg-stage-new','cfg-stages-chips')">+ जोडा</button>
+        </div>
       </div>
       <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
         <div class="sr-label">Geo-fence अंतर (मीटर)</div>
@@ -738,8 +762,8 @@ const DEF_SETTINGS = {
   tripRate: 500,
   stages: 'सुरुवात,शेवट',
   fenceMeters: 10,
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbzvmupoqVcl8ZCvdhjX3-Pgoyex0ltco4f3maaETrZDsPU7zlccwum8R7iQ74kxjyvmDg/exec',
-  sheetUrl: 'https://docs.google.com/spreadsheets/d/10SLjB59Qfn9q2OWRGuvYrypvONoJxrwMynMGN6A1nPU/edit?gid=0#gid=0',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbwTu9x5OkDeXcv1PfVv69TZYJVD2HhggDJhk-f1tUgaGA6KcrWkp2r5yGlMjeDtrbhDjA/exec',
+  sheetUrl: 'https://docs.google.com/spreadsheets/d/1fPTBp_4H3F5nUHuCNsAXOL3wHt0MtHASLtPzFg-6GZY/edit',
   autoSync: true,
   drvPhone: '',
   srpPhone: '',
@@ -1582,6 +1606,7 @@ function viewFullPhoto(tripId, stage) {
 }
 
 function refreshAdmDash() {
+  renderStageChips('adm-stages-chips');
   const trips=DB.get('trips')||[], now=new Date();
   const mt=trips.filter(t=>t.month===now.getMonth()&&t.year===now.getFullYear());
   setTxt('adm-trips', mt.length);
@@ -1686,6 +1711,8 @@ function makeBill() {
   setTxt('bill-period','महिना: '+MONTHS[month]+' '+year);
   setTxt('bill-drv-name','चालक: '+dName);
   setTxt('bill-gram-name',s.gramName||'ग्रामपंचायत');
+  setTxt('bill-logo', s.logo||'🚌');
+  document.getElementById('btn-bulk-pdf').style.display = (did==='all') ? 'block' : 'none';
   let grand=0;
   document.getElementById('bill-body').innerHTML=trips.map(t=>{
     grand+=t.amount;
@@ -1697,23 +1724,125 @@ function makeBill() {
   showToast('📋 बिल तयार झाले!');
 }
 
+// सर्व बिलांसाठी (Print आणि PDF दोन्हीसाठी) एकच आकर्षक डिझाईन तयार करणारं function
+function buildBillHTML(trips, driverName, periodLabel, s) {
+  let grand=0, paid=0;
+  const rows = trips.map(t=>{
+    grand+=t.amount;
+    if (t.status==='paid') paid+=t.amount;
+    const payStatus = t.status==='paid'
+      ? `<span style="background:#d4edda;color:#1a6b3a;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;">💚 Paid</span>`
+      : `<span style="background:#fff4e0;color:#e67e00;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;">⏳ येणे</span>`;
+    return `<tr><td>${t.date}</td><td>${t.fromName} → ${t.toName}</td><td>${payStatus}</td><td style="font-weight:700;text-align:right;">₹${t.amount}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:#999;padding:18px;">Trips नाहीत</td></tr>`;
+  const pending = grand-paid;
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>बिल — ${driverName}</title>
+<style>
+@page { margin: 14mm; }
+* { box-sizing:border-box; }
+body{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a16; padding:0; margin:0; }
+.bill-wrap{ border:2.5px solid ${s.color}; border-radius:14px; padding:0; overflow:hidden; }
+.bill-banner{ background:linear-gradient(135deg, ${s.color} 0%, ${darkenColor(s.color,0.35)} 100%); color:white; padding:22px 26px 18px; text-align:center; position:relative; }
+.bill-logo{ font-size:46px; line-height:1; margin-bottom:4px; }
+.bill-banner h1{ font-size:21px; font-weight:800; margin:2px 0; letter-spacing:-0.3px; }
+.bill-banner .tagline{ font-size:11px; opacity:0.8; margin-top:2px; }
+.bill-meta{ display:flex; justify-content:space-between; background:#fff; padding:14px 26px; border-bottom:2px dashed ${s.color}33; font-size:13px; }
+.bill-meta b{ color:${s.color}; }
+.bill-body-pad{ padding:18px 26px 26px; }
+table{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:4px; }
+th{ background:${s.color}1a; color:${s.color}; padding:9px 8px; text-align:left; font-weight:800; border-bottom:2px solid ${s.color}; }
+td{ padding:9px 8px; border-bottom:1px solid #eee; }
+.summary-box{ margin-top:18px; display:flex; gap:10px; }
+.sbox{ flex:1; border-radius:10px; padding:12px; text-align:center; }
+.sbox .lbl{ font-size:10.5px; color:#777; font-weight:600; }
+.sbox .val{ font-size:18px; font-weight:800; margin-top:2px; }
+.footer{ margin-top:38px; display:flex; justify-content:space-between; padding:0 6px; }
+.sig{ text-align:center; border-top:1.5px solid #333; padding-top:6px; min-width:120px; font-size:11.5px; color:#444; }
+.gen-note{ text-align:center; font-size:10px; color:#aaa; margin-top:22px; }
+.seal{ position:absolute; right:22px; top:18px; font-size:11px; background:rgba(255,255,255,0.18); padding:5px 10px; border-radius:8px; }
+</style>
+</head><body>
+<div class="bill-wrap">
+  <div class="bill-banner">
+    <div class="seal">${s.gramName||'ग्रामपंचायत'}</div>
+    <div class="bill-logo">${s.logo||'🚌'}</div>
+    <h1>${s.appName||'ग्राम गाडी ट्रॅकर'} — वाहन बिल</h1>
+    <div class="tagline">${s.tagline||''}</div>
+  </div>
+  <div class="bill-meta">
+    <div>📅 <b>${periodLabel}</b></div>
+    <div>👤 चालक: <b>${driverName}</b></div>
+  </div>
+  <div class="bill-body-pad">
+    <table>
+      <thead><tr><th>तारीख</th><th>Route</th><th>Payment</th><th style="text-align:right;">रक्कम</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="summary-box">
+      <div class="sbox" style="background:${s.color}14;"><div class="lbl">एकूण</div><div class="val" style="color:${s.color}">₹${grand}</div></div>
+      <div class="sbox" style="background:#d4edda;"><div class="lbl">Paid</div><div class="val" style="color:#1a6b3a">₹${paid}</div></div>
+      <div class="sbox" style="background:#fff4e0;"><div class="lbl">येणे</div><div class="val" style="color:#e67e00">₹${pending}</div></div>
+    </div>
+    <div class="footer">
+      <div class="sig">चालक<br>Driver</div>
+      <div class="sig">सरपंच<br>Sarpanch</div>
+      <div class="sig">ग्रामसेवक<br>Secretary</div>
+    </div>
+    <div class="gen-note">Generated by ${s.appName} • ${new Date().toLocaleString('mr-IN')}</div>
+  </div>
+</div>
+</body></html>`;
+}
+
 function printBill() {
   const s=getSettings();
+  const month=parseInt(document.getElementById('bill-month').value);
+  const did=document.getElementById('bill-driver').value;
+  const year=new Date().getFullYear();
+  const trips=(DB.get('trips')||[]).filter(t=>t.month===month&&t.year===year&&(did==='all'||t.driverId===did)&&t.status!=='active');
+  const users=DB.get('users')||DEF_USERS;
+  const dName=did==='all'?'सर्व चालक':(users.find(u=>u.id===did)?.name||did);
+  const periodLabel='महिना: '+MONTHS[month]+' '+year;
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>बिल</title>
-<style>body{font-family:Arial,sans-serif;padding:24px;color:#000}h2{color:${s.color};text-align:center}table{width:100%;border-collapse:collapse;margin-top:14px}th{background:#e8f5ee;color:${s.color};padding:8px;text-align:left;border:1px solid #ccc}td{padding:8px;border:1px solid #ccc}tfoot td{background:#e8f5ee;font-weight:700}.footer{margin-top:40px;display:flex;justify-content:space-between}.sig{text-align:center;border-top:1px solid #000;padding-top:6px;min-width:120px;font-size:12px}</style>
-</head><body>
-<h2>${s.gramName||'ग्रामपंचायत'} — वाहन बिल</h2>
-<p style="text-align:center">${document.getElementById('bill-period').textContent} | ${document.getElementById('bill-drv-name').textContent}</p>
-${document.getElementById('bill-content').querySelector('table').outerHTML}
-<div class="footer">
-  <div class="sig">चालक<br>Driver</div>
-  <div class="sig">सरपंच<br>Sarpanch</div>
-  <div class="sig">ग्रामसेवक<br>Secretary</div>
-</div>
-<p style="text-align:center;font-size:11px;color:#999;margin-top:20px">Generated by ${s.appName} • ${new Date().toLocaleString('mr-IN')}</p>
-</body></html>`);
+  w.document.write(buildBillHTML(trips, dName, periodLabel, s));
   w.document.close(); setTimeout(()=>w.print(),500);
+}
+
+// "सर्व चालक" निवडल्यावर — प्रत्येक चालकाचं वेगळं PDF (एकत्र नाही)
+async function generateAllDriverBills() {
+  const s=getSettings();
+  const month=parseInt(document.getElementById('bill-month').value);
+  const year=new Date().getFullYear();
+  const periodLabel='महिना: '+MONTHS[month]+' '+year;
+  const users=(DB.get('users')||DEF_USERS).filter(u=>u.role==='user');
+  const allTrips=DB.get('trips')||[];
+  const driversWithTrips = users.filter(u=>allTrips.some(t=>t.driverId===u.id&&t.month===month&&t.year===year&&t.status!=='active'));
+
+  if (!driversWithTrips.length) { showToast('⚠️ या महिन्यात कोणत्याही चालकाचे trips नाहीत'); return; }
+
+  if (typeof html2pdf === 'undefined') { showToast('⚠️ PDF library load झाली नाही — internet तपासा'); return; }
+
+  showToast(`📥 ${driversWithTrips.length} चालकांची वेगवेगळी PDF बनत आहेत...`, 5000);
+
+  for (const u of driversWithTrips) {
+    const trips = allTrips.filter(t=>t.driverId===u.id&&t.month===month&&t.year===year&&t.status!=='active');
+    const html = buildBillHTML(trips, u.name, periodLabel, s);
+    const container = document.createElement('div');
+    container.style.position='fixed'; container.style.left='-9999px'; container.style.width='800px';
+    container.innerHTML = html.replace(/^[\s\S]*<body>/,'').replace(/<\/body>[\s\S]*$/,'');
+    document.body.appendChild(container);
+    const safeMonth = MONTHS[month].replace(/\s/g,'');
+    const safeName = String(u.name).replace(/[^a-zA-Z0-9अ-ह]/g,'_');
+    await html2pdf().set({
+      margin: 8,
+      filename: `बिल_${safeName}_${safeMonth}${year}.pdf`,
+      html2canvas: { scale: 2 },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' }
+    }).from(container).save();
+    document.body.removeChild(container);
+  }
+  showToast(`✅ ${driversWithTrips.length} चालकांची PDF download झाली!`);
 }
 
 function waDriver() {
@@ -1755,13 +1884,76 @@ function showDevTab(tab) {
   if(tab==='data') renderDevData();
 }
 
+// ================================================================
+// STAGE CHIPS — सुरुवात/शेवट कायम, मध्ये हवे तितके थांबे (Admin + Developer दोघेही वापरू शकतात)
+// ================================================================
+function getStagesArray() {
+  const s = getSettings();
+  const arr = (s.stages || 'सुरुवात,शेवट').split(',').map(x=>x.trim()).filter(Boolean);
+  if (arr.length < 2) return ['सुरुवात','शेवट'];
+  return arr;
+}
+
+function renderStageChips(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const stages = getStagesArray();
+  el.innerHTML = stages.map((st,i)=>{
+    const isFixed = (i===0 || i===stages.length-1); // सुरुवात व शेवट काढता येणार नाहीत
+    return `<div class="chip">${st}${isFixed?'':` <button class="chip-x" onclick="removeMiddleStage(${i})">✕</button>`}</div>`;
+  }).join('');
+}
+
+function addMiddleStage(inputId, containerId) {
+  const inp = document.getElementById(inputId);
+  const name = (inp.value||'').trim();
+  if (!name) { showToast('⚠️ थांब्याचे नाव टाका'); return; }
+  const stages = getStagesArray();
+  // नवीन थांबा शेवटच्या आधी (सुरुवात...नवीन...शेवट) घाला
+  stages.splice(stages.length-1, 0, name);
+  const s = getSettings();
+  s.stages = stages.join(',');
+  DB.set('settings', s);
+  inp.value = '';
+  renderStageChips(containerId);
+  showToast('✅ थांबा जोडला — सर्व devices साठी sync होत आहे...');
+  pushSettingsOnly();
+}
+
+function removeMiddleStage(index) {
+  const stages = getStagesArray();
+  if (index===0 || index===stages.length-1) return; // सुरुवात/शेवट काढता येणार नाही
+  if (!confirm(`"${stages[index]}" हा थांबा काढायचा?`)) return;
+  stages.splice(index,1);
+  const s = getSettings();
+  s.stages = stages.join(',');
+  DB.set('settings', s);
+  renderStageChips('cfg-stages-chips');
+  renderStageChips('adm-stages-chips');
+  showToast('🗑️ थांबा काढला — sync होत आहे...');
+  pushSettingsOnly();
+}
+
+// फक्त Settings push करा (Users शिवाय) — Admin आणि Developer दोघांनाही वापरता यावं म्हणून हलकं ठेवलं
+async function pushSettingsOnly() {
+  const s = getSettings();
+  if (!s.scriptUrl) return;
+  try {
+    await fetch(s.scriptUrl, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'saveSettings', settings:s })
+    });
+  } catch(e) { console.warn('pushSettingsOnly error:', e.message); }
+}
+
 function loadSettingsForm() {
   const s=getSettings();
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
   set('cfg-app-name',s.appName); set('cfg-tagline',s.tagline); set('cfg-logo',s.logo);
   set('cfg-gram-name',s.gramName); set('cfg-color',s.color);
   set('cfg-trip-rate',s.tripRate||500);
-  set('cfg-stages',s.stages||'सुरुवात,शेवट');
+  renderStageChips('cfg-stages-chips');
   set('cfg-fence',s.fenceMeters);
   // Photo settings
   set('cfg-photo-maxkb',   s.photoMaxKB    || 150);
@@ -1793,7 +1985,7 @@ function saveAllSettings() {
   s.gramName=get('cfg-gram-name')||s.gramName;
   s.color=get('cfg-color')||s.color;
   s.tripRate=parseInt(get('cfg-trip-rate'))||s.tripRate;
-  s.stages=get('cfg-stages')||s.stages;
+  // s.stages आता chip UI मधून थेट DB मध्ये save होतात (वर पाहा addMiddleStage/removeStage)
   s.fenceMeters=parseInt(get('cfg-fence'))||s.fenceMeters;
   // Photo settings
   const maxKB = parseInt(get('cfg-photo-maxkb'));
@@ -1947,10 +2139,34 @@ function renderDevData() {
   if(pr){
     if(!trips.length){ pr.innerHTML='<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">अजून data नाही</div></div>'; return; }
     pr.innerHTML=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:var(--primary-light)"><th style="padding:6px;color:var(--primary)">तारीख</th><th style="padding:6px;color:var(--primary)">चालक</th><th style="padding:6px;color:var(--primary)">Route</th><th style="padding:6px;color:var(--primary)">₹</th><th style="padding:6px;color:var(--primary)">Status</th></tr></thead>
-      <tbody>${trips.slice(-15).reverse().map(t=>`<tr style="border-bottom:1px solid var(--gray2)"><td style="padding:6px">${t.date}</td><td style="padding:6px">${t.driverName}</td><td style="padding:6px">${t.fromName}→${t.toName}</td><td style="padding:6px;font-weight:700;color:var(--primary)">₹${t.amount}</td><td style="padding:6px">${t.status}</td></tr>`).join('')}</tbody>
+      <thead><tr style="background:var(--primary-light)"><th style="padding:6px;color:var(--primary)">तारीख</th><th style="padding:6px;color:var(--primary)">चालक</th><th style="padding:6px;color:var(--primary)">Route</th><th style="padding:6px;color:var(--primary)">₹</th><th style="padding:6px;color:var(--primary)">Status</th><th style="padding:6px;color:var(--primary)"></th></tr></thead>
+      <tbody>${trips.slice(-30).reverse().map(t=>`<tr style="border-bottom:1px solid var(--gray2)"><td style="padding:6px">${t.date}</td><td style="padding:6px">${t.driverName}</td><td style="padding:6px">${t.fromName}→${t.toName}</td><td style="padding:6px;font-weight:700;color:var(--primary)">₹${t.amount}</td><td style="padding:6px">${t.status}</td><td style="padding:6px"><button class="btn btn-red btn-sm" onclick="deleteTrip(${t.id})">🗑️</button></td></tr>`).join('')}</tbody>
     </table></div>`;
   }
+}
+
+function deleteTrip(id) {
+  const trips = DB.get('trips')||[];
+  const trip = trips.find(t=>String(t.id)===String(id));
+  if (!trip) return;
+  if (!confirm(`हा trip delete करायचा?\n${trip.fromName} → ${trip.toName} | ₹${trip.amount} | ${trip.date}\n(अर्धवट असो किंवा पूर्ण झालेला — कायमचा delete होईल)`)) return;
+  DB.set('trips', trips.filter(t=>String(t.id)!==String(id)));
+  if (activeTrip && String(activeTrip.id)===String(id)) { activeTrip=null; DB.set('activeTrip', null); }
+  renderDevData(); updateSyncBadge();
+  showToast('🗑️ Trip delete झाला — Sheet मधूनही काढत आहे...');
+  deleteTripFromSheet(id);
+}
+
+async function deleteTripFromSheet(id) {
+  const s=getSettings();
+  if (!s.scriptUrl) return;
+  try {
+    await fetch(s.scriptUrl, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'deleteTrip', tripId:id })
+    });
+  } catch(e) { console.warn('deleteTripFromSheet error:', e.message); }
 }
 
 function exportJSON() {

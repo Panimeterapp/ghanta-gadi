@@ -32,6 +32,7 @@ function doPost(e) {
       case 'getUsers':     result = getUsers();                    break;
       case 'getStops':     result = getStops();                    break;
       case 'getTrips':     result = getTrips(data.driverId);        break;
+      case 'deleteTrip':   result = deleteTrip(data.tripId);         break;
       case 'addPayment':   result = addPayment(data.payment);      break;
       case 'uploadPhoto':  result = uploadPhoto(data.photo);       break;
       case 'saveUsers':    result = saveUsers(data.users);         break;
@@ -212,6 +213,29 @@ function getTrips(driverId) {
   });
   if (driverId) trips = trips.filter(t => String(t.driverId) === String(driverId));
   return { trips };
+}
+
+// Trip कायमचा delete करा (row Sheet मधून काढून टाका)
+function deleteTrip(tripId) {
+  const sh = ensureTripsSheet();
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(tripId)) {
+      sh.deleteRow(i+1);
+      // संबंधित Payments row पण काढून टाका (असल्यास)
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const paySh = ss.getSheetByName(S_PAYMENTS);
+      if (paySh) {
+        const pdata = paySh.getDataRange().getValues();
+        for (let j = pdata.length - 1; j >= 1; j--) {
+          if (String(pdata[j][0]) === String(tripId)) paySh.deleteRow(j+1);
+        }
+      }
+      updateMonthlySummary();
+      return { deleted: true };
+    }
+  }
+  return { deleted: false, reason: 'not found' };
 }
 
 // Payment नोंद झाल्यावर trip update करा
