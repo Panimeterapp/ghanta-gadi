@@ -32,7 +32,7 @@ function doPost(e) {
       case 'getUsers':     result = getUsers();                    break;
       case 'getStops':     result = getStops();                    break;
       case 'getTrips':     result = getTrips(data.driverId);        break;
-      case 'deleteTrip':   result = deleteTrip(data.tripId);         break;
+      case 'deleteTrip':   result = deleteTrip(data.tripId, data.role);  break;
       case 'addPayment':   result = addPayment(data.payment);      break;
       case 'uploadPhoto':  result = uploadPhoto(data.photo);       break;
       case 'saveUsers':    result = saveUsers(data.users);         break;
@@ -216,11 +216,28 @@ function getTrips(driverId) {
 }
 
 // Trip कायमचा delete करा (row Sheet मधून काढून टाका)
-function deleteTrip(tripId) {
+function deleteTrip(tripId, role) {
   const sh = ensureTripsSheet();
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(tripId)) {
+      const status = data[i][11] || '';
+      if (role === 'admin' && status !== 'active') {
+        return { deleted: false, reason: 'admin can only delete active trips' };
+      }
+      // या trip चे Drive फोटोही काढून टाका (column 19 मध्ये साठवलेल्या links मधून)
+      const driveLinksRaw = data[i][18] || '';
+      if (driveLinksRaw) {
+        driveLinksRaw.split('\n').forEach(line => {
+          const m = line.match(/https?:\/\/drive\.google\.com\/\S+/);
+          if (m) {
+            try {
+              const idMatch = m[0].match(/[-\w]{25,}/);
+              if (idMatch) DriveApp.getFileById(idMatch[0]).setTrashed(true);
+            } catch(e) { /* फाईल आधीच नसेल तर दुर्लक्ष करा */ }
+          }
+        });
+      }
       sh.deleteRow(i+1);
       // संबंधित Payments row पण काढून टाका (असल्यास)
       const ss = SpreadsheetApp.getActiveSpreadsheet();

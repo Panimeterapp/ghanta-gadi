@@ -437,9 +437,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">सुरुवात व शेवट कायम राहतात — मध्ये हवे तितके थांबे जोडा, जिथे चालकाला फोटो काढावा लागेल.</div>
       <div class="chip-list" id="adm-stages-chips"></div>
       <div class="chip-add-row">
-        <input class="sr-input" id="adm-stage-new" placeholder="नवीन मधला थांबा">
+        <select class="sr-input" id="adm-stage-new">
+          <option value="">— Stops यादीतून थांबा निवडा —</option>
+        </select>
         <button class="btn btn-primary btn-sm" onclick="addMiddleStage('adm-stage-new','adm-stages-chips')">+ जोडा</button>
       </div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:5px;">📍 फक्त Stops यादीतले थांबे (GPS असलेले) निवडता येतील, जेणेकरून geo-fence नीट काम करेल. नवीन थांबा हवा असेल तर आधी "थांबे" विभागात तो GPS सह जोडा.</div>
     </div>
     <div class="section-label">चालक यादी</div>
     <div id="adm-drivers"></div>
@@ -563,9 +566,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <div style="font-size:11px;color:var(--text3);margin-bottom:2px;">सुरुवात व शेवट हे कायम राहतात — मध्ये हवे तितके थांबे जोडा/काढा.</div>
         <div class="chip-list" id="cfg-stages-chips"></div>
         <div class="chip-add-row">
-          <input class="sr-input" id="cfg-stage-new" placeholder="नवीन मधला थांबा (उदा. लोडिंग पॉइंट)">
+          <select class="sr-input" id="cfg-stage-new">
+            <option value="">— Stops यादीतून थांबा निवडा —</option>
+          </select>
           <button class="btn btn-primary btn-sm" onclick="addMiddleStage('cfg-stage-new','cfg-stages-chips')">+ जोडा</button>
         </div>
+        <div style="font-size:10.5px;color:var(--text3);">📍 फक्त Stops यादीतले थांबे (GPS असलेले) निवडता येतील — नवीन थांबा हवा असेल तर आधी वरच्या "थांबे" विभागात तो GPS सह जोडा.</div>
       </div>
       <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
         <div class="sr-label">Geo-fence अंतर (मीटर)</div>
@@ -1073,8 +1079,11 @@ function getCurrentStageStop() {
   if (stages.length === 1) return getStopById(activeTrip.toStopId);
   if (idx === 0) return getStopById(activeTrip.fromStopId);
   if (idx === stages.length - 1) return getStopById(activeTrip.toStopId);
-  // मधले थांबे — यांना ठरलेलं GPS location नसतं, म्हणून geo-fence लावत नाही (कुठूनही फोटो काढता येईल)
-  return null;
+  // मधला थांबा — हा नाव Stops यादीतल्या एखाद्या थांब्याशी जुळत असेल तर त्याचं खरं GPS location वापरून geo-fence लावा
+  const stageName = stages[idx];
+  const stopsList = DB.get('stops') || DEF_STOPS;
+  const matched = stopsList.find(s => s.name === stageName);
+  return matched || null; // जुना/freetext stage असेल (कोणत्याही Stop शी जुळत नसेल) तर fence नाही — कुठूनही फोटो काढता येईल
 }
 
 function checkTripFence() {
@@ -1664,7 +1673,7 @@ function refreshAdmTrips() {
         </div>
         ${t.status==='paid'?`<div style="font-size:11px;color:var(--text3);margin-top:6px;">💳 ${t.paymentMode||'—'} • ${t.paymentDate||'—'}${t.paymentUTR?' • UTR: '+t.paymentUTR:''}</div>`:''}
         ${t.status==='complete'?`<button class="btn btn-primary btn-full mt-8" onclick="openPaymentModal('${t.id}')">💳 Payment नोंद करा</button>`:''}
-        <button class="btn btn-red btn-full mt-8" onclick="deleteTrip('${t.id}')">🗑️ Trip Delete करा</button>
+        ${t.status==='active'?`<button class="btn btn-red btn-full mt-8" onclick="deleteTrip('${t.id}')">🗑️ चुकीची Trip Delete करा</button>`:`<div style="font-size:10.5px;color:var(--text3);margin-top:6px;text-align:center;">🔒 ही trip बिल झालेली आहे — फक्त Developer delete करू शकतो</div>`}
       </div>`).join('');
   });
 }
@@ -1907,25 +1916,38 @@ function renderStageChips(containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const stages = getStagesArray();
+  const stopsList = DB.get('stops') || DEF_STOPS;
   el.innerHTML = stages.map((st,i)=>{
     const isFixed = (i===0 || i===stages.length-1); // सुरुवात व शेवट काढता येणार नाहीत
-    return `<div class="chip">${st}${isFixed?'':` <button class="chip-x" onclick="removeMiddleStage(${i})">✕</button>`}</div>`;
+    const hasGPS = stopsList.some(s=>s.name===st);
+    const icon = isFixed ? '' : (hasGPS ? '📍 ' : '⚠️ ');
+    return `<div class="chip" ${!isFixed && !hasGPS ? 'title="GPS location नाही — fence शिवाय फोटो काढता येईल"' : ''}>${icon}${st}${isFixed?'':` <button class="chip-x" onclick="removeMiddleStage(${i})">✕</button>`}</div>`;
   }).join('');
+  // खालचा dropdown — आधीच stages मध्ये नसलेले Stops दाखवा
+  ['cfg-stage-new','adm-stage-new'].forEach(selId=>{
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const already = new Set(stages);
+    sel.innerHTML = '<option value="">— Stops यादीतून थांबा निवडा —</option>' +
+      stopsList.filter(s=>!already.has(s.name)).map(s=>`<option value="${s.name}">📍 ${s.name}</option>`).join('');
+  });
 }
 
 function addMiddleStage(inputId, containerId) {
   const inp = document.getElementById(inputId);
   const name = (inp.value||'').trim();
-  if (!name) { showToast('⚠️ थांब्याचे नाव टाका'); return; }
+  if (!name) { showToast('⚠️ Stops यादीतून थांबा निवडा'); return; }
   const stages = getStagesArray();
+  if (stages.includes(name)) { showToast('⚠️ हा थांबा आधीच यादीत आहे'); return; }
   // नवीन थांबा शेवटच्या आधी (सुरुवात...नवीन...शेवट) घाला
   stages.splice(stages.length-1, 0, name);
   const s = getSettings();
   s.stages = stages.join(',');
   DB.set('settings', s);
   inp.value = '';
-  renderStageChips(containerId);
-  showToast('✅ थांबा जोडला — सर्व devices साठी sync होत आहे...');
+  renderStageChips('cfg-stages-chips');
+  renderStageChips('adm-stages-chips');
+  showToast('✅ थांबा (GPS सह) जोडला — Sheet वर sync होत आहे...');
   pushSettingsOnly();
 }
 
@@ -2178,6 +2200,10 @@ function deleteTrip(id) {
   const trips = DB.get('trips')||[];
   const trip = trips.find(t=>String(t.id)===String(id));
   if (!trip) return;
+  if (currentUser && currentUser.role==='admin' && trip.status!=='active') {
+    showToast('🔒 ही trip आधीच बिल झालेली आहे — फक्त Developer ती delete करू शकतो');
+    return;
+  }
   if (!confirm(`हा trip delete करायचा?\n${trip.fromName} → ${trip.toName} | ₹${trip.amount} | ${trip.date}\n(अर्धवट असो किंवा पूर्ण झालेला — कायमचा delete होईल)`)) return;
   DB.set('trips', trips.filter(t=>String(t.id)!==String(id)));
   if (activeTrip && String(activeTrip.id)===String(id)) { activeTrip=null; DB.set('activeTrip', null); }
@@ -2186,17 +2212,17 @@ function deleteTrip(id) {
   if (document.getElementById('adm-dash')) refreshAdmDash();
   updateSyncBadge();
   showToast('🗑️ Trip delete झाला — Sheet मधूनही काढत आहे...');
-  deleteTripFromSheet(id);
+  deleteTripFromSheet(id, currentUser ? currentUser.role : '');
 }
 
-async function deleteTripFromSheet(id) {
+async function deleteTripFromSheet(id, role) {
   const s=getSettings();
   if (!s.scriptUrl) return;
   try {
     const res = await fetch(s.scriptUrl, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'deleteTrip', tripId:id })
+      body: JSON.stringify({ action:'deleteTrip', tripId:id, role:role })
     });
     const data = await res.json();
     if (data && data.deleted) {
